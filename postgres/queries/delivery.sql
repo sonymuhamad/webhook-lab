@@ -12,7 +12,7 @@ WHERE e.tenant_id = @tenant_id::uuid
 -- No row locks: two workers running this at once claim the same rows and
 -- send them twice. Lab 1 measures that before switching to SKIP LOCKED.
 SELECT d.id, d.message_id, d.tenant_id, d.attempt_count,
-       e.url AS endpoint_url, m.event_type, m.payload
+       e.url AS endpoint_url, m.event_type, m.payload, m.created_at AS message_created_at
 FROM deliveries d
 JOIN endpoints e ON e.id = d.endpoint_id
 JOIN messages m ON m.id = d.message_id
@@ -46,3 +46,9 @@ SELECT id, delivery_id, status_code, error, duration_ms, created_at
 FROM attempts
 WHERE delivery_id = ANY(@delivery_ids::uuid[])
 ORDER BY id;
+
+-- name: CountPendingDeliveries :one
+SELECT count(*) FILTER (WHERE next_attempt_at <= now()) AS due,
+       count(*) FILTER (WHERE next_attempt_at > now())  AS scheduled
+FROM deliveries
+WHERE status = 'pending';

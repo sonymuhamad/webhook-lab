@@ -13,3 +13,8 @@ FROM tenants t
 JOIN api_keys k ON k.tenant_id = t.id
 WHERE k.key_hash = $1
   AND k.revoked_at IS NULL;
+
+-- name: TenantNameExists :one
+SELECT EXISTS (
+    SELECT 1 FROM tenants WHERE lower(name) = lower(@name::text)
+);

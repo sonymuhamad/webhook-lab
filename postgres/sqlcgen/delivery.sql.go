@@ -14,6 +14,25 @@ import (
 	"github.com/sonymuhamad/webhook-lab/enum"
 )
 
+const countPendingDeliveries = `-- name: CountPendingDeliveries :one
+SELECT count(*) FILTER (WHERE next_attempt_at <= now()) AS due,
+       count(*) FILTER (WHERE next_attempt_at > now())  AS scheduled
+FROM deliveries
+WHERE status = 'pending'
+`
+
+type CountPendingDeliveriesRow struct {
+	Due       int64
+	Scheduled int64
+}
+
+func (q *Queries) CountPendingDeliveries(ctx context.Context) (CountPendingDeliveriesRow, error) {
+	row := q.db.QueryRow(ctx, countPendingDeliveries)
+	var i CountPendingDeliveriesRow
+	err := row.Scan(&i.Due, &i.Scheduled)
+	return i, err
+}
+
 const createAttempt = `-- name: CreateAttempt :exec
 INSERT INTO attempts (delivery_id, tenant_id, status_code, error, duration_ms)
 VALUES ($1, $2, $3, $4, $5)
@@ -155,7 +174,7 @@ func (q *Queries) ListDeliveriesByMessage(ctx context.Context, messageID uuid.UU
 
 const listDueDeliveries = `-- name: ListDueDeliveries :many
 SELECT d.id, d.message_id, d.tenant_id, d.attempt_count,
-       e.url AS endpoint_url, m.event_type, m.payload
+       e.url AS endpoint_url, m.event_type, m.payload, m.created_at AS message_created_at
 FROM deliveries d
 JOIN endpoints e ON e.id = d.endpoint_id
 JOIN messages m ON m.id = d.message_id
@@ -166,13 +185,14 @@ LIMIT $1
 `
 
 type ListDueDeliveriesRow struct {
-	ID           uuid.UUID
-	MessageID    uuid.UUID
-	TenantID     uuid.UUID
-	AttemptCount int32
-	EndpointURL  string
-	EventType    string
-	Payload      json.RawMessage
+	ID               uuid.UUID
+	MessageID        uuid.UUID
+	TenantID         uuid.UUID
+	AttemptCount     int32
+	EndpointURL      string
+	EventType        string
+	Payload          json.RawMessage
+	MessageCreatedAt time.Time
 }
 
 // The status filter is a literal, not a parameter, so the planner can match
@@ -197,6 +217,7 @@ func (q *Queries) ListDueDeliveries(ctx context.Context, limit int32) ([]ListDue
 			&i.EndpointURL,
 			&i.EventType,
 			&i.Payload,
+			&i.MessageCreatedAt,
 		); err != nil {
 			return nil, err
 		}

@@ -138,3 +138,18 @@ func (mr *MockTenantRepositoryMockRecorder) GetByAPIKeyHash(ctx, hash any) *gomo
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByAPIKeyHash", reflect.TypeOf((*MockTenantRepository)(nil).GetByAPIKeyHash), ctx, hash)
 }
+
+// NameExists mocks base method.
+func (m *MockTenantRepository) NameExists(ctx context.Context, name string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NameExists", ctx, name)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NameExists indicates an expected call of NameExists.
+func (mr *MockTenantRepositoryMockRecorder) NameExists(ctx, name any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NameExists", reflect.TypeOf((*MockTenantRepository)(nil).NameExists), ctx, name)
+}

@@ -18,6 +18,7 @@ import (
 func TestTenantCreate(t *testing.T) {
 	repo := mock.NewMockTenantRepository(gomock.NewController(t))
 	tenant := webhook.Tenant{ID: uuid.New(), Name: "acme"}
+	repo.EXPECT().NameExists(gomock.Any(), "acme").Return(false, nil)
 	repo.EXPECT().Create(gomock.Any(), "acme").Return(tenant, nil)
 
 	var stored webhook.CreateAPIKeyParam
@@ -63,9 +64,23 @@ func TestTenantCreateRejectsBlankName(t *testing.T) {
 	}
 }
 
+func TestTenantCreateRejectsTakenName(t *testing.T) {
+	repo := mock.NewMockTenantRepository(gomock.NewController(t))
+	repo.EXPECT().NameExists(gomock.Any(), "Fore").Return(true, nil)
+	// No Create EXPECT: a taken name must not insert anything.
+
+	_, err := usecase.NewTenant(repo, passthroughTx(t)).Create(context.Background(), webhook.CreateTenantParam{Name: " Fore "})
+
+	var conflictErr webhook.ConflictError
+	if !errors.As(err, &conflictErr) {
+		t.Fatalf("err = %v, want ConflictError", err)
+	}
+}
+
 func TestTenantCreateStopsWhenTenantInsertFails(t *testing.T) {
 	repo := mock.NewMockTenantRepository(gomock.NewController(t))
 	dbErr := errors.New("connection reset")
+	repo.EXPECT().NameExists(gomock.Any(), gomock.Any()).Return(false, nil)
 	repo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(webhook.Tenant{}, dbErr)
 	// No CreateAPIKey EXPECT: a key must not be written for a tenant that was not created.
 

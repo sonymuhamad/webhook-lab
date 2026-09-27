@@ -1,4 +1,4 @@
-.PHONY: run-api run-worker run-receiver migrate migrate-down migrate-status generate test test-integration
+.PHONY: run-api run-worker run-receiver migrate migrate-down migrate-status generate test test-integration grafana-import
 
 run-api:
 	go run ./cmd/api
@@ -30,3 +30,7 @@ test:
 # Postgres container.
 test-integration:
 	go test -tags integration -count=1 ./...
+
+# Needs Grafana, Prometheus, and Loki running locally.
+grafana-import:
+	./observability/grafana/import.sh

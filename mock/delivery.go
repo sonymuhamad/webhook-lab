@@ -42,6 +42,21 @@ func (m *MockDeliveryUsecase) EXPECT() *MockDeliveryUsecaseMockRecorder {
 	return m.recorder
 }
 
+// CountPending mocks base method.
+func (m *MockDeliveryUsecase) CountPending(ctx context.Context) (webhook.PendingCount, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountPending", ctx)
+	ret0, _ := ret[0].(webhook.PendingCount)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountPending indicates an expected call of CountPending.
+func (mr *MockDeliveryUsecaseMockRecorder) CountPending(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountPending", reflect.TypeOf((*MockDeliveryUsecase)(nil).CountPending), ctx)
+}
+
 // ProcessDue mocks base method.
 func (m *MockDeliveryUsecase) ProcessDue(ctx context.Context, limit int) (int, error) {
 	m.ctrl.T.Helper()
@@ -79,6 +94,21 @@ func NewMockDeliveryRepository(ctrl *gomock.Controller) *MockDeliveryRepository 
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockDeliveryRepository) EXPECT() *MockDeliveryRepositoryMockRecorder {
 	return m.recorder
+}
+
+// CountPending mocks base method.
+func (m *MockDeliveryRepository) CountPending(ctx context.Context) (webhook.PendingCount, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountPending", ctx)
+	ret0, _ := ret[0].(webhook.PendingCount)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountPending indicates an expected call of CountPending.
+func (mr *MockDeliveryRepositoryMockRecorder) CountPending(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountPending", reflect.TypeOf((*MockDeliveryRepository)(nil).CountPending), ctx)
 }
 
 // CreateAttempt mocks base method.

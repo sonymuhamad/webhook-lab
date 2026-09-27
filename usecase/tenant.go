@@ -31,17 +31,29 @@ func NewTenant(repo webhook.TenantRepository, tx webhook.Transactor) *Tenant {
 
 // Create stores the tenant and its first API key in one transaction, so a
 // tenant never exists without a way to authenticate.
+//
+// Names are unique case-insensitively, checked here rather than by a database
+// constraint. Two concurrent requests with the same name can both pass the
+// check; that is accepted for an admin-only endpoint.
 func (u *Tenant) Create(ctx context.Context, param webhook.CreateTenantParam) (webhook.CreateTenantResult, error) {
 	name := strings.TrimSpace(param.Name)
 	if name == "" {
 		return webhook.CreateTenantResult{}, webhook.ValidationError{Message: "name must not be blank"}
 	}
 
+	taken, err := u.repo.NameExists(ctx, name)
+	if err != nil {
+		return webhook.CreateTenantResult{}, fmt.Errorf("create tenant: %w", err)
+	}
+	if taken {
+		return webhook.CreateTenantResult{}, webhook.ConflictError{Message: fmt.Sprintf("tenant name %q is already taken", name)}
+	}
+
 	// rand.Text returns 26 base32 characters, i.e. 128 bits of entropy.
 	apiKey := apiKeyPrefix + rand.Text()
 
 	var tenant webhook.Tenant
-	err := u.tx.WithinTx(ctx, func(ctx context.Context) error {
+	err = u.tx.WithinTx(ctx, func(ctx context.Context) error {
 		var err error
 		tenant, err = u.repo.Create(ctx, name)
 		if err != nil {

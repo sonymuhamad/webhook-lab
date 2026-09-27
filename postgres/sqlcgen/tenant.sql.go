@@ -54,3 +54,16 @@ func (q *Queries) GetTenantByAPIKeyHash(ctx context.Context, keyHash []byte) (Te
 	err := row.Scan(&i.ID, &i.Name, &i.CreatedAt)
 	return i, err
 }
+
+const tenantNameExists = `-- name: TenantNameExists :one
+SELECT EXISTS (
+    SELECT 1 FROM tenants WHERE lower(name) = lower($1::text)
+)
+`
+
+func (q *Queries) TenantNameExists(ctx context.Context, name string) (bool, error) {
+	row := q.db.QueryRow(ctx, tenantNameExists, name)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}

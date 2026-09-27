@@ -39,6 +39,7 @@ type TenantUsecase interface {
 
 type TenantRepository interface {
 	Create(ctx context.Context, name string) (Tenant, error)
+	NameExists(ctx context.Context, name string) (bool, error)
 	CreateAPIKey(ctx context.Context, param CreateAPIKeyParam) error
 	GetByAPIKeyHash(ctx context.Context, hash []byte) (Tenant, error)
 }

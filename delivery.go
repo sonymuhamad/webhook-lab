@@ -41,13 +41,21 @@ type DeliveryDetail struct {
 
 // DueDelivery is a pending delivery with everything the sender needs.
 type DueDelivery struct {
-	ID           uuid.UUID
-	MessageID    uuid.UUID
-	TenantID     uuid.UUID
-	EndpointURL  string
-	EventType    string
-	Payload      json.RawMessage
-	AttemptCount int
+	ID               uuid.UUID
+	MessageID        uuid.UUID
+	TenantID         uuid.UUID
+	EndpointURL      string
+	EventType        string
+	Payload          json.RawMessage
+	MessageCreatedAt time.Time
+	AttemptCount     int
+}
+
+// PendingCount splits pending deliveries into those the worker can send now
+// and those waiting for a retry delay to pass.
+type PendingCount struct {
+	Due       int64
+	Scheduled int64
 }
 
 type CreateAttemptParam struct {
@@ -78,6 +86,7 @@ type SendResult struct {
 
 type DeliveryUsecase interface {
 	ProcessDue(ctx context.Context, limit int) (int, error)
+	CountPending(ctx context.Context) (PendingCount, error)
 }
 
 type DeliveryRepository interface {
@@ -87,6 +96,7 @@ type DeliveryRepository interface {
 	Update(ctx context.Context, param UpdateDeliveryParam) error
 	CreateAttempt(ctx context.Context, param CreateAttemptParam) error
 	ListAttempts(ctx context.Context, deliveryIDs []uuid.UUID) ([]Attempt, error)
+	CountPending(ctx context.Context) (PendingCount, error)
 }
 
 type Sender interface {

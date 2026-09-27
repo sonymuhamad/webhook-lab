@@ -28,6 +28,15 @@ func (r *TenantRepository) Create(ctx context.Context, name string) (webhook.Ten
 	return toTenant(row), nil
 }
 
+// NameExists compares names case-insensitively.
+func (r *TenantRepository) NameExists(ctx context.Context, name string) (bool, error) {
+	exists, err := queries(ctx, r.pool).TenantNameExists(ctx, name)
+	if err != nil {
+		return false, fmt.Errorf("check tenant name: %w", err)
+	}
+	return exists, nil
+}
+
 func (r *TenantRepository) CreateAPIKey(ctx context.Context, param webhook.CreateAPIKeyParam) error {
 	err := queries(ctx, r.pool).CreateAPIKey(ctx, sqlcgen.CreateAPIKeyParams{
 		TenantID: param.TenantID,

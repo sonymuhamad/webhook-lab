@@ -49,6 +49,24 @@ func TestTenantRepositoryCreateAndLookup(t *testing.T) {
 	}
 }
 
+func TestTenantRepositoryNameExistsIgnoresCase(t *testing.T) {
+	resetDB(t)
+	repo := postgres.NewTenantRepository(testPool)
+	createTenant(t, "Fore")
+
+	for name, want := range map[string]bool{"Fore": true, "fore": true, "FORE": true, "Fore Dental": false} {
+		t.Run(name, func(t *testing.T) {
+			got, err := repo.NameExists(context.Background(), name)
+			if err != nil {
+				t.Fatalf("NameExists: %v", err)
+			}
+			if got != want {
+				t.Errorf("NameExists(%q) = %v, want %v", name, got, want)
+			}
+		})
+	}
+}
+
 func TestTenantRepositoryLookupMisses(t *testing.T) {
 	resetDB(t)
 	repo := postgres.NewTenantRepository(testPool)

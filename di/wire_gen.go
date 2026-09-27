@@ -56,7 +56,11 @@ func InitWorker(ctx context.Context, cfg config.Config) (*worker.Worker, func(),
 	transactor := postgres.NewTransactor(pool)
 	usecaseDelivery := usecase.NewDelivery(deliveryRepository, senderHTTP, transactor, delivery)
 	configWorker := cfg.Worker
-	workerWorker := worker.New(usecaseDelivery, configWorker)
+	workerWorker, err := worker.New(usecaseDelivery, configWorker)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
 	return workerWorker, func() {
 		cleanup()
 	}, nil

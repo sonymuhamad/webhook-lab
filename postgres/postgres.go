@@ -20,5 +20,16 @@ func NewPool(ctx context.Context, cfg config.Postgres) (*pgxpool.Pool, func(), e
 		pool.Close()
 		return nil, nil, fmt.Errorf("ping postgres: %w", err)
 	}
-	return pool, pool.Close, nil
+
+	metrics, err := registerPoolMetrics(pool)
+	if err != nil {
+		pool.Close()
+		return nil, nil, fmt.Errorf("register pool metrics: %w", err)
+	}
+
+	cleanup := func() {
+		metrics.Unregister() //nolint:errcheck // only fails for an already removed callback
+		pool.Close()
+	}
+	return pool, cleanup, nil
 }

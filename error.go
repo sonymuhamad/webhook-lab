@@ -17,3 +17,13 @@ type ValidationError struct {
 func (e ValidationError) Error() string {
 	return e.Message
 }
+
+// ConflictError means the request clashes with existing data; its message is
+// safe to return to the client as-is.
+type ConflictError struct {
+	Message string
+}
+
+func (e ConflictError) Error() string {
+	return e.Message
+}

@@ -9,6 +9,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 
 	webhook "github.com/sonymuhamad/webhook-lab"
 	"github.com/sonymuhamad/webhook-lab/config"
@@ -27,7 +29,7 @@ func NewRouter(
 	message := &messageHandler{messages: messages}
 
 	r := chi.NewRouter()
-	r.Use(middleware.Recoverer)
+	r.Use(middleware.Recoverer, labelRoute)
 
 	r.Get("/healthz", health.check)
 
@@ -44,7 +46,20 @@ func NewRouter(
 		r.Get("/messages/{id}", message.get)
 	})
 
-	return r
+	return otelhttp.NewHandler(r, "webhook-api", otelhttp.WithFilter(func(r *http.Request) bool {
+		return r.URL.Path != "/healthz"
+	}))
+}
+
+// labelRoute adds the matched chi pattern, such as /messages/{id}, to the
+// request metrics. Without it every message ID would become its own series.
+func labelRoute(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
+		if labeler, ok := otelhttp.LabelerFromContext(r.Context()); ok {
+			labeler.Add(semconv.HTTPRoute(chi.RouteContext(r.Context()).RoutePattern()))
+		}
+	})
 }
 
 func NewServer(cfg config.HTTP, h http.Handler) *http.Server {
@@ -74,9 +89,12 @@ type errorResponse struct {
 // logged and returned as a generic 500 so internal details do not leak.
 func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	var validationErr webhook.ValidationError
+	var conflictErr webhook.ConflictError
 	switch {
 	case errors.As(err, &validationErr):
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: validationErr.Message})
+	case errors.As(err, &conflictErr):
+		writeJSON(w, http.StatusConflict, errorResponse{Error: conflictErr.Message})
 	case errors.Is(err, webhook.ErrUnauthorized):
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "unauthorized"})
 	case errors.Is(err, webhook.ErrNotFound):

@@ -55,6 +55,24 @@ func TestCreateTenantRejectsBadRequest(t *testing.T) {
 	}
 }
 
+func TestCreateTenantMapsConflictError(t *testing.T) {
+	router := newTestRouter(t)
+	router.tenants.EXPECT().
+		Create(gomock.Any(), gomock.Any()).
+		Return(webhook.CreateTenantResult{}, webhook.ConflictError{Message: `tenant name "Fore" is already taken`})
+
+	rec := serve(router, http.MethodPost, "/admin/tenants", adminToken, `{"name":"Fore"}`)
+
+	assertStatus(t, rec, http.StatusConflict)
+	var body struct {
+		Error string `json:"error"`
+	}
+	decode(t, rec, &body)
+	if body.Error != `tenant name "Fore" is already taken` {
+		t.Errorf("error = %q, want the conflict message", body.Error)
+	}
+}
+
 func TestCreateTenantMapsValidationError(t *testing.T) {
 	router := newTestRouter(t)
 	router.tenants.EXPECT().

@@ -14,12 +14,21 @@ import (
 const minAdminTokenLength = 32
 
 type Config struct {
-	LogLevel slog.Level `env:"LOG_LEVEL" envDefault:"info"`
-	HTTP     HTTP       `envPrefix:"HTTP_"`
-	Postgres Postgres   `envPrefix:"POSTGRES_"`
-	Auth     Auth
-	Worker   Worker   `envPrefix:"WORKER_"`
-	Delivery Delivery `envPrefix:"DELIVERY_"`
+	LogLevel  slog.Level `env:"LOG_LEVEL" envDefault:"info"`
+	HTTP      HTTP       `envPrefix:"HTTP_"`
+	Postgres  Postgres   `envPrefix:"POSTGRES_"`
+	Auth      Auth
+	Worker    Worker    `envPrefix:"WORKER_"`
+	Delivery  Delivery  `envPrefix:"DELIVERY_"`
+	Telemetry Telemetry `envPrefix:"OTEL_EXPORTER_OTLP_"`
+}
+
+// Telemetry uses the standard OpenTelemetry variable names. An empty endpoint
+// turns that signal off. Other OTEL_* variables, such as
+// OTEL_METRIC_EXPORT_INTERVAL, are read by the SDK directly.
+type Telemetry struct {
+	MetricsEndpoint string `env:"METRICS_ENDPOINT"`
+	LogsEndpoint    string `env:"LOGS_ENDPOINT"`
 }
 
 type HTTP struct {

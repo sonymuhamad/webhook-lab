@@ -10,10 +10,14 @@ import (
 	"os/signal"
 	"runtime"
 	"syscall"
+	"time"
 
 	"github.com/sonymuhamad/webhook-lab/config"
 	"github.com/sonymuhamad/webhook-lab/di"
+	"github.com/sonymuhamad/webhook-lab/telemetry"
 )
+
+const telemetryFlushTimeout = 5 * time.Second
 
 func main() {
 	if err := run(); err != nil {
@@ -33,13 +37,22 @@ func run() error {
 	if err := cfg.Auth.Validate(); err != nil {
 		return err
 	}
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel})))
+
+	logExport, shutdownTelemetry, err := telemetry.Setup(ctx, cfg.Telemetry, "webhook-api")
+	if err != nil {
+		return fmt.Errorf("setup telemetry: %w", err)
+	}
+	slog.SetDefault(telemetry.NewLogger(cfg.LogLevel, logExport))
 
 	srv, cleanup, err := di.InitAPI(ctx, cfg)
 	if err != nil {
+		flushTelemetry(shutdownTelemetry)
 		return fmt.Errorf("init api: %w", err)
 	}
 	defer cleanup()
+	// Deferred after cleanup so it runs before it: the final export reads
+	// metrics that query the pool, which must still be open.
+	defer flushTelemetry(shutdownTelemetry)
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.ListenAndServe() }()
@@ -61,4 +74,12 @@ func run() error {
 		return fmt.Errorf("shutdown http: %w", err)
 	}
 	return nil
+}
+
+func flushTelemetry(shutdown func(context.Context) error) {
+	ctx, cancel := context.WithTimeout(context.Background(), telemetryFlushTimeout)
+	defer cancel()
+	if err := shutdown(ctx); err != nil {
+		slog.Error("flush telemetry", "error", err)
+	}
 }
