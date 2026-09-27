@@ -73,10 +73,11 @@ type UpdateDeliveryParam struct {
 }
 
 type SendRequest struct {
-	URL       string
-	MessageID uuid.UUID
-	EventType string
-	Payload   json.RawMessage
+	URL        string
+	MessageID  uuid.UUID
+	DeliveryID uuid.UUID
+	EventType  string
+	Payload    json.RawMessage
 }
 
 type SendResult struct {
@@ -89,9 +90,12 @@ type DeliveryUsecase interface {
 	CountPending(ctx context.Context) (PendingCount, error)
 }
 
+type Claimer interface {
+	ClaimDue(ctx context.Context, limit int) ([]DueDelivery, error)
+}
+
 type DeliveryRepository interface {
 	CreateForActiveEndpoints(ctx context.Context, message Message) (int64, error)
-	ListDue(ctx context.Context, limit int) ([]DueDelivery, error)
 	ListByMessage(ctx context.Context, messageID uuid.UUID) ([]Delivery, error)
 	Update(ctx context.Context, param UpdateDeliveryParam) error
 	CreateAttempt(ctx context.Context, param CreateAttemptParam) error

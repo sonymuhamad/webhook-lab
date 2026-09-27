@@ -72,6 +72,45 @@ func (mr *MockDeliveryUsecaseMockRecorder) ProcessDue(ctx, limit any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessDue", reflect.TypeOf((*MockDeliveryUsecase)(nil).ProcessDue), ctx, limit)
 }
 
+// MockClaimer is a mock of Claimer interface.
+type MockClaimer struct {
+	ctrl     *gomock.Controller
+	recorder *MockClaimerMockRecorder
+	isgomock struct{}
+}
+
+// MockClaimerMockRecorder is the mock recorder for MockClaimer.
+type MockClaimerMockRecorder struct {
+	mock *MockClaimer
+}
+
+// NewMockClaimer creates a new mock instance.
+func NewMockClaimer(ctrl *gomock.Controller) *MockClaimer {
+	mock := &MockClaimer{ctrl: ctrl}
+	mock.recorder = &MockClaimerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockClaimer) EXPECT() *MockClaimerMockRecorder {
+	return m.recorder
+}
+
+// ClaimDue mocks base method.
+func (m *MockClaimer) ClaimDue(ctx context.Context, limit int) ([]webhook.DueDelivery, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClaimDue", ctx, limit)
+	ret0, _ := ret[0].([]webhook.DueDelivery)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClaimDue indicates an expected call of ClaimDue.
+func (mr *MockClaimerMockRecorder) ClaimDue(ctx, limit any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClaimDue", reflect.TypeOf((*MockClaimer)(nil).ClaimDue), ctx, limit)
+}
+
 // MockDeliveryRepository is a mock of DeliveryRepository interface.
 type MockDeliveryRepository struct {
 	ctrl     *gomock.Controller
@@ -168,21 +207,6 @@ func (m *MockDeliveryRepository) ListByMessage(ctx context.Context, messageID uu
 func (mr *MockDeliveryRepositoryMockRecorder) ListByMessage(ctx, messageID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListByMessage", reflect.TypeOf((*MockDeliveryRepository)(nil).ListByMessage), ctx, messageID)
-}
-
-// ListDue mocks base method.
-func (m *MockDeliveryRepository) ListDue(ctx context.Context, limit int) ([]webhook.DueDelivery, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListDue", ctx, limit)
-	ret0, _ := ret[0].([]webhook.DueDelivery)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListDue indicates an expected call of ListDue.
-func (mr *MockDeliveryRepositoryMockRecorder) ListDue(ctx, limit any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListDue", reflect.TypeOf((*MockDeliveryRepository)(nil).ListDue), ctx, limit)
 }
 
 // Update mocks base method.

@@ -32,6 +32,10 @@ var (
 		metric.WithDescription("Time spent waiting for the endpoint to answer."),
 		metric.WithUnit("s"),
 		metric.WithExplicitBucketBoundaries(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10))
+	claimDuration, _ = deliveryMeter.Float64Histogram("delivery.claim.duration",
+		metric.WithDescription("Time to take one batch of due deliveries off the queue."),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1))
 	deliveryLag, _ = deliveryMeter.Float64Histogram("delivery.lag",
 		metric.WithDescription("Time from message accepted to successful delivery, retries included."),
 		metric.WithUnit("s"),
@@ -39,23 +43,32 @@ var (
 )
 
 type Delivery struct {
-	repo   webhook.DeliveryRepository
-	sender webhook.Sender
-	tx     webhook.Transactor
-	cfg    config.Delivery
+	claimer webhook.Claimer
+	repo    webhook.DeliveryRepository
+	sender  webhook.Sender
+	tx      webhook.Transactor
+	cfg     config.Delivery
 }
 
-func NewDelivery(repo webhook.DeliveryRepository, sender webhook.Sender, tx webhook.Transactor, cfg config.Delivery) *Delivery {
-	return &Delivery{repo: repo, sender: sender, tx: tx, cfg: cfg}
+func NewDelivery(
+	claimer webhook.Claimer,
+	repo webhook.DeliveryRepository,
+	sender webhook.Sender,
+	tx webhook.Transactor,
+	cfg config.Delivery,
+) *Delivery {
+	return &Delivery{claimer: claimer, repo: repo, sender: sender, tx: tx, cfg: cfg}
 }
 
 // ProcessDue sends up to limit due deliveries one after another and returns
 // how many it processed. It stops at the first delivery whose outcome could
 // not be saved; that delivery stays pending and is sent again later.
 func (u *Delivery) ProcessDue(ctx context.Context, limit int) (int, error) {
-	due, err := u.repo.ListDue(ctx, limit)
+	start := time.Now()
+	due, err := u.claimer.ClaimDue(ctx, limit)
+	claimDuration.Record(ctx, time.Since(start).Seconds())
 	if err != nil {
-		return 0, fmt.Errorf("list due deliveries: %w", err)
+		return 0, fmt.Errorf("claim due deliveries: %w", err)
 	}
 
 	for i, d := range due {
@@ -76,10 +89,11 @@ func (u *Delivery) CountPending(ctx context.Context) (webhook.PendingCount, erro
 
 func (u *Delivery) deliver(ctx context.Context, d webhook.DueDelivery) error {
 	result, sendErr := u.sender.Send(ctx, webhook.SendRequest{
-		URL:       d.EndpointURL,
-		MessageID: d.MessageID,
-		EventType: d.EventType,
-		Payload:   d.Payload,
+		URL:        d.EndpointURL,
+		MessageID:  d.MessageID,
+		DeliveryID: d.ID,
+		EventType:  d.EventType,
+		Payload:    d.Payload,
 	})
 
 	attempt := webhook.CreateAttemptParam{DeliveryID: d.ID, TenantID: d.TenantID, Duration: result.Duration}

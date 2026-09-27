@@ -40,3 +40,5 @@ go.work.sum
 *.sln
 *.sw?
 .claude
+# Lab API keys written by labs/*/setup.sh
+.lab.env

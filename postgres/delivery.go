@@ -33,28 +33,6 @@ func (r *DeliveryRepository) CreateForActiveEndpoints(ctx context.Context, messa
 	return n, nil
 }
 
-func (r *DeliveryRepository) ListDue(ctx context.Context, limit int) ([]webhook.DueDelivery, error) {
-	rows, err := queries(ctx, r.pool).ListDueDeliveries(ctx, int32(limit))
-	if err != nil {
-		return nil, fmt.Errorf("select due deliveries: %w", err)
-	}
-
-	due := make([]webhook.DueDelivery, len(rows))
-	for i, row := range rows {
-		due[i] = webhook.DueDelivery{
-			ID:               row.ID,
-			MessageID:        row.MessageID,
-			TenantID:         row.TenantID,
-			EndpointURL:      row.EndpointURL,
-			EventType:        row.EventType,
-			Payload:          row.Payload,
-			MessageCreatedAt: row.MessageCreatedAt,
-			AttemptCount:     int(row.AttemptCount),
-		}
-	}
-	return due, nil
-}
-
 func (r *DeliveryRepository) CountPending(ctx context.Context) (webhook.PendingCount, error) {
 	row, err := queries(ctx, r.pool).CountPendingDeliveries(ctx)
 	if err != nil {

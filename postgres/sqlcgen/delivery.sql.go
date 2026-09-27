@@ -14,6 +14,87 @@ import (
 	"github.com/sonymuhamad/webhook-lab/enum"
 )
 
+const claimDueDeliveries = `-- name: ClaimDueDeliveries :many
+WITH due AS MATERIALIZED (
+    SELECT id
+    FROM deliveries
+    WHERE status = 'pending'
+      AND next_attempt_at <= now()
+    ORDER BY next_attempt_at
+    LIMIT $1
+    FOR UPDATE SKIP LOCKED
+), claimed AS (
+    UPDATE deliveries d
+    SET next_attempt_at = now() + make_interval(secs => $2::float8),
+        updated_at      = now()
+    FROM due
+    WHERE d.id = due.id
+    RETURNING d.id, d.message_id, d.endpoint_id, d.tenant_id, d.attempt_count
+)
+SELECT c.id, c.message_id, c.tenant_id, c.attempt_count,
+       e.url AS endpoint_url, m.event_type, m.payload, m.created_at AS message_created_at
+FROM claimed c
+JOIN endpoints e ON e.id = c.endpoint_id
+JOIN messages m ON m.id = c.message_id
+`
+
+type ClaimDueDeliveriesParams struct {
+	BatchSize    int32
+	LeaseSeconds float64
+}
+
+type ClaimDueDeliveriesRow struct {
+	ID               uuid.UUID
+	MessageID        uuid.UUID
+	TenantID         uuid.UUID
+	AttemptCount     int32
+	EndpointURL      string
+	EventType        string
+	Payload          json.RawMessage
+	MessageCreatedAt time.Time
+}
+
+// Claims due deliveries by pushing next_attempt_at forward by the lease, so
+// other workers stop seeing them as due until the lease runs out.
+//
+// SKIP LOCKED only covers the moment of claiming: concurrent claims pass over
+// rows another claim is taking instead of waiting for it. The row locks end
+// when this statement commits, before anything is sent; from then on the
+// lease is what keeps other workers away.
+//
+// MATERIALIZED makes Postgres run the locking select once, as its own step.
+// Without it, Postgres 12+ may inline a CTE referenced once into the UPDATE,
+// and a planner that rescans it could lock more rows than the batch size.
+// Returned rows are in no particular order.
+func (q *Queries) ClaimDueDeliveries(ctx context.Context, arg ClaimDueDeliveriesParams) ([]ClaimDueDeliveriesRow, error) {
+	rows, err := q.db.Query(ctx, claimDueDeliveries, arg.BatchSize, arg.LeaseSeconds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ClaimDueDeliveriesRow{}
+	for rows.Next() {
+		var i ClaimDueDeliveriesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.MessageID,
+			&i.TenantID,
+			&i.AttemptCount,
+			&i.EndpointURL,
+			&i.EventType,
+			&i.Payload,
+			&i.MessageCreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countPendingDeliveries = `-- name: CountPendingDeliveries :one
 SELECT count(*) FILTER (WHERE next_attempt_at <= now()) AS due,
        count(*) FILTER (WHERE next_attempt_at > now())  AS scheduled
@@ -198,8 +279,8 @@ type ListDueDeliveriesRow struct {
 // The status filter is a literal, not a parameter, so the planner can match
 // it to the partial index deliveries_due_idx.
 //
-// No row locks: two workers running this at once claim the same rows and
-// send them twice. Lab 1 measures that before switching to SKIP LOCKED.
+// No row locks and no lease: workers running this at once read the same rows
+// and all send them. Used only by CLAIM_MODE=naive, for lab 01.
 func (q *Queries) ListDueDeliveries(ctx context.Context, limit int32) ([]ListDueDeliveriesRow, error) {
 	rows, err := q.db.Query(ctx, listDueDeliveries, limit)
 	if err != nil {

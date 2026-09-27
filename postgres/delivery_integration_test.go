@@ -53,47 +53,6 @@ func TestDeliveryRepositoryFanOutSkipsDisabledAndOtherTenants(t *testing.T) {
 	}
 }
 
-func TestDeliveryRepositoryListDueOnlyReturnsPendingAndDue(t *testing.T) {
-	resetDB(t)
-	ctx := context.Background()
-	repo := postgres.NewDeliveryRepository(testPool)
-	tenant, _ := createTenant(t, "acme")
-	endpoint := createEndpoint(t, tenant.ID, "https://example.com/hook")
-
-	newDelivery := func() uuid.UUID {
-		message := createMessage(t, tenant.ID, nil)
-		if _, err := repo.CreateForActiveEndpoints(ctx, message); err != nil {
-			t.Fatalf("CreateForActiveEndpoints: %v", err)
-		}
-		deliveries, err := repo.ListByMessage(ctx, message.ID)
-		if err != nil || len(deliveries) != 1 {
-			t.Fatalf("ListByMessage = %+v, %v", deliveries, err)
-		}
-		return deliveries[0].ID
-	}
-	due := newDelivery()
-	later := newDelivery()
-	done := newDelivery()
-
-	if err := repo.Update(ctx, webhook.UpdateDeliveryParam{ID: later, Status: enum.DeliveryStatusPending, NextAttemptAt: time.Now().Add(time.Hour)}); err != nil {
-		t.Fatalf("update: %v", err)
-	}
-	if err := repo.Update(ctx, webhook.UpdateDeliveryParam{ID: done, Status: enum.DeliveryStatusSucceeded, NextAttemptAt: time.Now()}); err != nil {
-		t.Fatalf("update: %v", err)
-	}
-
-	got, err := repo.ListDue(ctx, 10)
-	if err != nil {
-		t.Fatalf("ListDue: %v", err)
-	}
-	if len(got) != 1 || got[0].ID != due {
-		t.Fatalf("due = %+v, want only %s", got, due)
-	}
-	if got[0].EndpointURL != endpoint.URL || got[0].EventType != "booking.created" || len(got[0].Payload) == 0 {
-		t.Errorf("due delivery is missing what the sender needs: %+v", got[0])
-	}
-}
-
 func TestDeliveryRepositoryAttemptsAndUpdate(t *testing.T) {
 	resetDB(t)
 	ctx := context.Background()

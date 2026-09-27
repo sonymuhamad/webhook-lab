@@ -1,6 +1,7 @@
 // Command receiver is a fake webhook endpoint for local runs and labs. It can
 // be told to answer slowly or to fail a share of requests, and it counts how
-// many deliveries arrived and how many distinct messages they carried.
+// many deliveries it accepted and how many of those were the same delivery
+// accepted again.
 //
 //	go run ./cmd/receiver -addr :9000 -latency 200ms -fail-rate 0.2
 //	curl localhost:9000/stats
@@ -17,11 +18,15 @@ import (
 	"time"
 )
 
+// Duplicates are counted per webhook-delivery-id, not per webhook-id: one
+// message fans out to several endpoints under the same webhook-id, and those
+// sends are distinct deliveries even when they all reach this one receiver.
 type stats struct {
-	mu       sync.Mutex
-	received int
-	failed   int
-	seen     map[string]int
+	mu         sync.Mutex
+	received   int
+	failed     int
+	deliveries map[string]int
+	messages   map[string]struct{}
 }
 
 type statsResponse struct {
@@ -29,6 +34,7 @@ type statsResponse struct {
 	Failed     int `json:"failed"`
 	Unique     int `json:"unique"`
 	Duplicates int `json:"duplicates"`
+	Messages   int `json:"messages"`
 }
 
 func main() {
@@ -39,7 +45,7 @@ func main() {
 	flag.Parse()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	s := &stats{seen: make(map[string]int)}
+	s := &stats{deliveries: make(map[string]int), messages: make(map[string]struct{})}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /stats", func(w http.ResponseWriter, _ *http.Request) {
@@ -49,18 +55,19 @@ func main() {
 	mux.HandleFunc("POST /", func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(*latency)
 		messageID := r.Header.Get("webhook-id")
+		deliveryID := r.Header.Get("webhook-delivery-id")
 
 		if rand.Float64() < *failRate {
 			s.recordFailure()
-			logger.Info("delivery rejected", "webhook_id", messageID, "status", *failStatus)
+			logger.Info("delivery rejected", "webhook_id", messageID, "delivery_id", deliveryID, "status", *failStatus)
 			w.WriteHeader(*failStatus)
 			return
 		}
 
 		// Only accepted deliveries count towards unique and duplicates: a
 		// rejected one is expected to come back.
-		s.recordSuccess(messageID)
-		logger.Info("delivery accepted", "webhook_id", messageID, "path", r.URL.Path)
+		s.recordSuccess(messageID, deliveryID)
+		logger.Info("delivery accepted", "webhook_id", messageID, "delivery_id", deliveryID, "path", r.URL.Path)
 		w.WriteHeader(http.StatusNoContent)
 	})
 
@@ -71,11 +78,12 @@ func main() {
 	}
 }
 
-func (s *stats) recordSuccess(messageID string) {
+func (s *stats) recordSuccess(messageID, deliveryID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.received++
-	s.seen[messageID]++
+	s.deliveries[deliveryID]++
+	s.messages[messageID] = struct{}{}
 }
 
 func (s *stats) recordFailure() {
@@ -90,7 +98,8 @@ func (s *stats) snapshot() statsResponse {
 	return statsResponse{
 		Received:   s.received,
 		Failed:     s.failed,
-		Unique:     len(s.seen),
-		Duplicates: s.received - len(s.seen),
+		Unique:     len(s.deliveries),
+		Duplicates: s.received - len(s.deliveries),
+		Messages:   len(s.messages),
 	}
 }

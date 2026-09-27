@@ -45,17 +45,22 @@ func InitAPI(ctx context.Context, cfg config.Config) (*http.Server, func(), erro
 }
 
 func InitWorker(ctx context.Context, cfg config.Config) (*worker.Worker, func(), error) {
+	configWorker := cfg.Worker
+	delivery := cfg.Delivery
 	configPostgres := cfg.Postgres
 	pool, cleanup, err := postgres.NewPool(ctx, configPostgres)
 	if err != nil {
 		return nil, nil, err
 	}
+	claimer, err := provideClaimer(configWorker, delivery, pool)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
 	deliveryRepository := postgres.NewDeliveryRepository(pool)
-	delivery := cfg.Delivery
 	senderHTTP := sender.NewHTTP(delivery)
 	transactor := postgres.NewTransactor(pool)
-	usecaseDelivery := usecase.NewDelivery(deliveryRepository, senderHTTP, transactor, delivery)
-	configWorker := cfg.Worker
+	usecaseDelivery := usecase.NewDelivery(claimer, deliveryRepository, senderHTTP, transactor, delivery)
 	workerWorker, err := worker.New(usecaseDelivery, configWorker)
 	if err != nil {
 		cleanup()

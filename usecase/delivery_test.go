@@ -36,12 +36,15 @@ func TestDeliveryProcessDueOutcomes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
+			claimer := mock.NewMockClaimer(ctrl)
 			repo := mock.NewMockDeliveryRepository(ctrl)
 			sender := mock.NewMockSender(ctrl)
 			due := webhook.DueDelivery{ID: uuid.New(), TenantID: uuid.New(), EndpointURL: "https://example.com/hook", AttemptCount: tt.attemptsSoFar}
 
-			repo.EXPECT().ListDue(gomock.Any(), 10).Return([]webhook.DueDelivery{due}, nil)
-			sender.EXPECT().Send(gomock.Any(), gomock.Any()).Return(tt.result, tt.sendErr)
+			claimer.EXPECT().ClaimDue(gomock.Any(), 10).Return([]webhook.DueDelivery{due}, nil)
+			sender.EXPECT().
+				Send(gomock.Any(), gomock.Cond(func(r webhook.SendRequest) bool { return r.DeliveryID == due.ID })).
+				Return(tt.result, tt.sendErr)
 
 			var attempt webhook.CreateAttemptParam
 			repo.EXPECT().CreateAttempt(gomock.Any(), gomock.Any()).
@@ -51,7 +54,7 @@ func TestDeliveryProcessDueOutcomes(t *testing.T) {
 				DoAndReturn(func(_ context.Context, p webhook.UpdateDeliveryParam) error { update = p; return nil })
 
 			before := time.Now()
-			n, err := usecase.NewDelivery(repo, sender, passthroughTx(t), deliveryConfig).ProcessDue(context.Background(), 10)
+			n, err := usecase.NewDelivery(claimer, repo, sender, passthroughTx(t), deliveryConfig).ProcessDue(context.Background(), 10)
 
 			if err != nil || n != 1 {
 				t.Fatalf("ProcessDue = %d, %v; want 1, nil", n, err)
@@ -73,16 +76,17 @@ func TestDeliveryProcessDueOutcomes(t *testing.T) {
 // must not be sent: the unsaved one stays pending and will be retried.
 func TestDeliveryProcessDueStopsWhenOutcomeCannotBeSaved(t *testing.T) {
 	ctrl := gomock.NewController(t)
+	claimer := mock.NewMockClaimer(ctrl)
 	repo := mock.NewMockDeliveryRepository(ctrl)
 	sender := mock.NewMockSender(ctrl)
 	due := []webhook.DueDelivery{{ID: uuid.New()}, {ID: uuid.New()}}
 	dbErr := errors.New("connection reset")
 
-	repo.EXPECT().ListDue(gomock.Any(), 10).Return(due, nil)
+	claimer.EXPECT().ClaimDue(gomock.Any(), 10).Return(due, nil)
 	sender.EXPECT().Send(gomock.Any(), gomock.Any()).Return(webhook.SendResult{StatusCode: 200}, nil).Times(1)
 	repo.EXPECT().CreateAttempt(gomock.Any(), gomock.Any()).Return(dbErr)
 
-	n, err := usecase.NewDelivery(repo, sender, passthroughTx(t), deliveryConfig).ProcessDue(context.Background(), 10)
+	n, err := usecase.NewDelivery(claimer, repo, sender, passthroughTx(t), deliveryConfig).ProcessDue(context.Background(), 10)
 
 	if !errors.Is(err, dbErr) || n != 0 {
 		t.Fatalf("ProcessDue = %d, %v; want 0 and an error wrapping %v", n, err, dbErr)

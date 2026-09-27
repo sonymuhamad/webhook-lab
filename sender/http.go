@@ -35,7 +35,10 @@ func NewHTTP(cfg config.Delivery) *HTTP {
 }
 
 // Send posts the payload with the Standard Webhooks id and timestamp headers.
-// Receivers dedupe on webhook-id, which stays the same across retries.
+// webhook-id is the message ID: the same for every endpoint and every retry,
+// so receivers dedupe events on it. webhook-delivery-id is not part of the
+// standard; it names one message-to-endpoint delivery, stays the same across
+// that delivery's retries, and exists for tracing a single send.
 func (s *HTTP) Send(ctx context.Context, req webhook.SendRequest) (webhook.SendResult, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, req.URL, bytes.NewReader(req.Payload))
 	if err != nil {
@@ -43,6 +46,7 @@ func (s *HTTP) Send(ctx context.Context, req webhook.SendRequest) (webhook.SendR
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("webhook-id", req.MessageID.String())
+	httpReq.Header.Set("webhook-delivery-id", req.DeliveryID.String())
 	httpReq.Header.Set("webhook-timestamp", strconv.FormatInt(time.Now().Unix(), 10))
 	httpReq.Header.Set("webhook-event-type", req.EventType)
 

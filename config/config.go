@@ -9,6 +9,8 @@ import (
 
 	"github.com/caarlos0/env/v11"
 	"github.com/joho/godotenv"
+
+	"github.com/sonymuhamad/webhook-lab/enum"
 )
 
 const minAdminTokenLength = 32
@@ -45,9 +47,14 @@ type Auth struct {
 }
 
 type Worker struct {
-	Count        int           `env:"COUNT" envDefault:"1"`
-	BatchSize    int           `env:"BATCH_SIZE" envDefault:"10"`
-	PollInterval time.Duration `env:"POLL_INTERVAL" envDefault:"500ms"`
+	Count        int            `env:"COUNT" envDefault:"1"`
+	BatchSize    int            `env:"BATCH_SIZE" envDefault:"10"`
+	PollInterval time.Duration  `env:"POLL_INTERVAL" envDefault:"500ms"`
+	ClaimMode    enum.ClaimMode `env:"CLAIM_MODE" envDefault:"skiplocked"`
+	// ClaimLease is how long a claimed delivery stays hidden from other
+	// workers. It must outlast a whole batch, which is sent one delivery at a
+	// time: BatchSize × DELIVERY_TIMEOUT in the worst case.
+	ClaimLease time.Duration `env:"CLAIM_LEASE" envDefault:"2m"`
 }
 
 type Delivery struct {

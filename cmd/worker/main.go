@@ -51,6 +51,7 @@ func run() error {
 
 	slog.Info("worker started",
 		"loops", cfg.Worker.Count,
+		"claim_mode", cfg.Worker.ClaimMode.String(),
 		"batch_size", cfg.Worker.BatchSize,
 		"poll_interval", cfg.Worker.PollInterval.String(),
 		"gomaxprocs", runtime.GOMAXPROCS(0),

@@ -27,10 +27,11 @@ func TestSendPostsPayloadWithWebhookHeaders(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	req := webhook.SendRequest{
-		URL:       srv.URL + "/hook",
-		MessageID: uuid.New(),
-		EventType: "booking.created",
-		Payload:   json.RawMessage(`{"booking_id":"b_1"}`),
+		URL:        srv.URL + "/hook",
+		MessageID:  uuid.New(),
+		DeliveryID: uuid.New(),
+		EventType:  "booking.created",
+		Payload:    json.RawMessage(`{"booking_id":"b_1"}`),
 	}
 	result, err := sender.NewHTTP(config.Delivery{Timeout: time.Second}).Send(context.Background(), req)
 
@@ -48,6 +49,9 @@ func TestSendPostsPayloadWithWebhookHeaders(t *testing.T) {
 	}
 	if got.Header.Get("webhook-id") != req.MessageID.String() {
 		t.Errorf("webhook-id = %q, want the message id", got.Header.Get("webhook-id"))
+	}
+	if got.Header.Get("webhook-delivery-id") != req.DeliveryID.String() {
+		t.Errorf("webhook-delivery-id = %q, want the delivery id", got.Header.Get("webhook-delivery-id"))
 	}
 	if got.Header.Get("webhook-timestamp") == "" || got.Header.Get("webhook-event-type") != "booking.created" {
 		t.Errorf("headers = %v", got.Header)

@@ -53,6 +53,7 @@ func InitWorker(ctx context.Context, cfg config.Config) (*worker.Worker, func(),
 	wire.Build(
 		wire.FieldsOf(new(config.Config), "Postgres", "Worker", "Delivery"),
 		postgresSet,
+		provideClaimer,
 		sender.NewHTTP,
 		wire.Bind(new(webhook.Sender), new(*sender.HTTP)),
 		usecase.NewDelivery,
