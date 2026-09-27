@@ -1,0 +1,39 @@
+version: "2"
+sql:
+  - engine: postgresql
+    schema: postgres/migrations
+    queries: postgres/queries
+    gen:
+      go:
+        package: sqlcgen
+        out: postgres/sqlcgen
+        sql_package: pgx/v5
+        emit_empty_slices: true
+        rename:
+          url: URL
+          api_key: APIKey
+          endpoint_url: EndpointURL
+        overrides:
+          - column: deliveries.status
+            go_type: github.com/sonymuhamad/webhook-lab/enum.DeliveryStatus
+          - db_type: jsonb
+            go_type: encoding/json.RawMessage
+          - db_type: text
+            nullable: true
+            go_type:
+              type: string
+              pointer: true
+          - db_type: pg_catalog.int4
+            nullable: true
+            go_type:
+              type: int32
+              pointer: true
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
+          - db_type: timestamptz
+            go_type: time.Time
+          - db_type: timestamptz
+            nullable: true
+            go_type:
+              type: time.Time
+              pointer: true

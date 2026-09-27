@@ -56,7 +56,7 @@ CREATE TABLE deliveries (
 -- how many deliveries have already finished.
 CREATE INDEX deliveries_due_idx ON deliveries (next_attempt_at) WHERE status = 'pending';
 
--- Left unpartitioned on purpose: lab 4 measures what it costs to fix that later.
+-- Left unpartitioned on purpose: a later lab measures what it costs to fix that.
 CREATE TABLE attempts (
     id          uuid PRIMARY KEY DEFAULT uuidv7(),
     delivery_id uuid NOT NULL REFERENCES deliveries (id),

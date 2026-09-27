@@ -2,16 +2,12 @@ package postgres
 
 import (
 	"context"
-	"embed"
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/sonymuhamad/webhook-lab/config"
 )
-
-//go:embed migrations/*.sql
-var Migrations embed.FS
 
 // NewPool connects to Postgres and verifies the connection before returning,
 // so a wrong URL fails at startup instead of on the first request.

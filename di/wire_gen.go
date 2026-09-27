@@ -8,9 +8,14 @@ package di
 
 import (
 	"context"
+	"github.com/google/wire"
+	"github.com/sonymuhamad/webhook-lab"
 	"github.com/sonymuhamad/webhook-lab/config"
 	"github.com/sonymuhamad/webhook-lab/httpapi"
 	"github.com/sonymuhamad/webhook-lab/postgres"
+	"github.com/sonymuhamad/webhook-lab/sender"
+	"github.com/sonymuhamad/webhook-lab/usecase"
+	"github.com/sonymuhamad/webhook-lab/worker"
 	"net/http"
 )
 
@@ -18,14 +23,45 @@ import (
 
 func InitAPI(ctx context.Context, cfg config.Config) (*http.Server, func(), error) {
 	configHTTP := cfg.HTTP
+	auth := cfg.Auth
 	configPostgres := cfg.Postgres
 	pool, cleanup, err := postgres.NewPool(ctx, configPostgres)
 	if err != nil {
 		return nil, nil, err
 	}
-	handler := httpapi.NewRouter(pool)
+	tenantRepository := postgres.NewTenantRepository(pool)
+	transactor := postgres.NewTransactor(pool)
+	tenant := usecase.NewTenant(tenantRepository, transactor)
+	endpointRepository := postgres.NewEndpointRepository(pool)
+	endpoint := usecase.NewEndpoint(endpointRepository)
+	messageRepository := postgres.NewMessageRepository(pool)
+	deliveryRepository := postgres.NewDeliveryRepository(pool)
+	message := usecase.NewMessage(messageRepository, deliveryRepository, transactor)
+	handler := httpapi.NewRouter(auth, pool, tenant, endpoint, message)
 	server := httpapi.NewServer(configHTTP, handler)
 	return server, func() {
 		cleanup()
 	}, nil
 }
+
+func InitWorker(ctx context.Context, cfg config.Config) (*worker.Worker, func(), error) {
+	configPostgres := cfg.Postgres
+	pool, cleanup, err := postgres.NewPool(ctx, configPostgres)
+	if err != nil {
+		return nil, nil, err
+	}
+	deliveryRepository := postgres.NewDeliveryRepository(pool)
+	delivery := cfg.Delivery
+	senderHTTP := sender.NewHTTP(delivery)
+	transactor := postgres.NewTransactor(pool)
+	usecaseDelivery := usecase.NewDelivery(deliveryRepository, senderHTTP, transactor, delivery)
+	configWorker := cfg.Worker
+	workerWorker := worker.New(usecaseDelivery, configWorker)
+	return workerWorker, func() {
+		cleanup()
+	}, nil
+}
+
+// wire.go:
+
+var postgresSet = wire.NewSet(postgres.NewPool, postgres.NewTransactor, wire.Bind(new(webhook.Transactor), new(*postgres.Transactor)), postgres.NewTenantRepository, wire.Bind(new(webhook.TenantRepository), new(*postgres.TenantRepository)), postgres.NewEndpointRepository, wire.Bind(new(webhook.EndpointRepository), new(*postgres.EndpointRepository)), postgres.NewMessageRepository, wire.Bind(new(webhook.MessageRepository), new(*postgres.MessageRepository)), postgres.NewDeliveryRepository, wire.Bind(new(webhook.DeliveryRepository), new(*postgres.DeliveryRepository)))

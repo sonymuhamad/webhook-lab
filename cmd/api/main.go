@@ -30,6 +30,9 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	if err := cfg.Auth.Validate(); err != nil {
+		return err
+	}
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel})))
 
 	srv, cleanup, err := di.InitAPI(ctx, cfg)

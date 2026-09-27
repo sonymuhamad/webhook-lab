@@ -11,10 +11,15 @@ import (
 	"github.com/joho/godotenv"
 )
 
+const minAdminTokenLength = 32
+
 type Config struct {
 	LogLevel slog.Level `env:"LOG_LEVEL" envDefault:"info"`
 	HTTP     HTTP       `envPrefix:"HTTP_"`
 	Postgres Postgres   `envPrefix:"POSTGRES_"`
+	Auth     Auth
+	Worker   Worker   `envPrefix:"WORKER_"`
+	Delivery Delivery `envPrefix:"DELIVERY_"`
 }
 
 type HTTP struct {
@@ -24,6 +29,21 @@ type HTTP struct {
 
 type Postgres struct {
 	URL string `env:"URL,required"`
+}
+
+type Auth struct {
+	AdminToken string `env:"ADMIN_TOKEN"`
+}
+
+type Worker struct {
+	BatchSize    int           `env:"BATCH_SIZE" envDefault:"10"`
+	PollInterval time.Duration `env:"POLL_INTERVAL" envDefault:"500ms"`
+}
+
+type Delivery struct {
+	Timeout     time.Duration `env:"TIMEOUT" envDefault:"10s"`
+	MaxAttempts int           `env:"MAX_ATTEMPTS" envDefault:"5"`
+	RetryDelay  time.Duration `env:"RETRY_DELAY" envDefault:"30s"`
 }
 
 // Load reads configuration from the environment. A .env file in the working
@@ -39,4 +59,14 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("parse env: %w", err)
 	}
 	return cfg, nil
+}
+
+// Validate is called only by the API, so the worker and migrator can run
+// without the admin secret. A short or empty token would make the admin
+// routes guessable, so the API refuses to start with one.
+func (a Auth) Validate() error {
+	if len(a.AdminToken) < minAdminTokenLength {
+		return fmt.Errorf("ADMIN_TOKEN must be at least %d characters", minAdminTokenLength)
+	}
+	return nil
 }

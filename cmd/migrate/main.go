@@ -2,13 +2,8 @@ package main
 
 import (
 	"context"
-	"database/sql"
-	"fmt"
 	"log/slog"
 	"os"
-
-	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 
 	"github.com/sonymuhamad/webhook-lab/config"
 	"github.com/sonymuhamad/webhook-lab/postgres"
@@ -28,21 +23,10 @@ func run() error {
 		return err
 	}
 
-	db, err := sql.Open("pgx", cfg.Postgres.URL)
-	if err != nil {
-		return fmt.Errorf("open postgres: %w", err)
-	}
-	defer db.Close()
-
-	goose.SetBaseFS(postgres.Migrations)
-	if err := goose.SetDialect("postgres"); err != nil {
-		return err
-	}
-
 	command := "up"
 	var args []string
 	if len(os.Args) > 1 {
 		command, args = os.Args[1], os.Args[2:]
 	}
-	return goose.RunContext(context.Background(), command, db, "migrations", args...)
+	return postgres.Migrate(context.Background(), cfg.Postgres.URL, command, args...)
 }
