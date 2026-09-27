@@ -50,6 +50,7 @@ func run() error {
 	defer flushTelemetry(shutdownTelemetry)
 
 	slog.Info("worker started",
+		"loops", cfg.Worker.Count,
 		"batch_size", cfg.Worker.BatchSize,
 		"poll_interval", cfg.Worker.PollInterval.String(),
 		"gomaxprocs", runtime.GOMAXPROCS(0),

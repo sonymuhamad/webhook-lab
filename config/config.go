@@ -45,6 +45,7 @@ type Auth struct {
 }
 
 type Worker struct {
+	Count        int           `env:"COUNT" envDefault:"1"`
 	BatchSize    int           `env:"BATCH_SIZE" envDefault:"10"`
 	PollInterval time.Duration `env:"POLL_INTERVAL" envDefault:"500ms"`
 }

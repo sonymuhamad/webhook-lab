@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 
@@ -29,7 +28,7 @@ func NewRouter(
 	message := &messageHandler{messages: messages}
 
 	r := chi.NewRouter()
-	r.Use(middleware.Recoverer, labelRoute)
+	r.Use(recoverPanic, labelRoute)
 
 	r.Get("/healthz", health.check)
 
