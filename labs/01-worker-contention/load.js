@@ -3,13 +3,14 @@
 //
 //   k6 run -e API_KEY=whl_... load.js
 //   k6 run -e API_KEY=whl_... -e RATE=400 -e DURATION=30s load.js
+//   k6 run -e API_KEYS=whl_a,whl_b load.js   # each request picks one key at random
 import http from 'k6/http';
 import { check } from 'k6';
 
 const api = __ENV.API || 'http://localhost:8080';
-const apiKey = __ENV.API_KEY;
-if (!apiKey) {
-  throw new Error('API_KEY is required: run setup.sh, then source .lab.env');
+const apiKeys = (__ENV.API_KEYS || __ENV.API_KEY || '').split(',').filter(Boolean);
+if (apiKeys.length === 0) {
+  throw new Error('API_KEY or API_KEYS is required: run setup.sh, then source .lab.env');
 }
 
 export const options = {
@@ -34,15 +35,15 @@ export const options = {
   summaryTrendStats: ['avg', 'p(50)', 'p(95)', 'p(99)', 'max'],
 };
 
-const params = {
-  headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-};
+const params = apiKeys.map((key) => ({
+  headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+}));
 
 export default function () {
   const body = JSON.stringify({
     event_type: 'booking.created',
     payload: { vu: __VU, iteration: __ITER },
   });
-  const res = http.post(`${api}/messages`, body, params);
+  const res = http.post(`${api}/messages`, body, params[Math.floor(Math.random() * params.length)]);
   check(res, { 'status is 202': (r) => r.status === 202 });
 }

@@ -1,4 +1,4 @@
-.PHONY: run-api run-worker run-receiver migrate migrate-down migrate-status generate test test-integration grafana-import
+.PHONY: run-api run-worker run-receiver migrate migrate-down migrate-status generate test test-integration grafana-import obs-up obs-down obs-status
 
 run-api:
 	go run ./cmd/api
@@ -34,3 +34,12 @@ test-integration:
 # Needs Grafana, Prometheus, and Loki running locally.
 grafana-import:
 	./observability/grafana/import.sh
+
+obs-up:
+	./observability/stack.sh up
+
+obs-down:
+	./observability/stack.sh down
+
+obs-status:
+	./observability/stack.sh status
