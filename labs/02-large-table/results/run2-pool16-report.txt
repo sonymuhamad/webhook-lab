@@ -1,0 +1,32 @@
+drained at 1790933732
+== receiver
+{
+  "received": 300001,
+  "failed": 15720,
+  "unique": 300001,
+  "duplicates": 0,
+  "messages": 300001
+}
+== database (run 20261002-162907)
+ messages | deliveries | succeeded | failed | attempts | failed_attempts | retried_deliveries 
+----------+------------+-----------+--------+----------+-----------------+--------------------
+   300001 |     300001 |    300001 |      0 |   315721 |           15720 |              14905
+(1 row)
+
+== database duplicates
+ deliveries_sent_twice_or_more | extra_successful_sends 
+-------------------------------+------------------------
+                             0 |                      0
+(1 row)
+
+window: 385s
+claim p50 / p99 (ms):         0.863 / 7.918
+claim avg (ms):               1.217
+sends/s:                      829.891
+failed sends (5xx, no reply): 15912.231
+pending due peak:             374
+delivery lag p50 / p99 (s):   0.19 / 55.281
+api pool acquire waits:       8542.998
+worker pool acquire waits:    0
+api pool wait time total (s): 287.178
+api pool wait per request (ms): 0.945

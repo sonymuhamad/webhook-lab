@@ -147,6 +147,84 @@ unfrozen part of the table only: 1,000 + 0.2 × 20 M × 0.003 ≈ 13,000 inserts
 not 4 M. The run inserted 60,000 rows a minute, so autovacuum ran on every
 1-minute naptime.
 
+## Run 2 — API pool of 16
+
+**Question:** run 1 had 10,226 acquire waits on the API's pool of 8. With a
+pool of 16 and the same load, do the waits and the p99 go down?
+
+One variable changes: the API's `pool_max_conns`, 8 → 16. Everything else is
+run 1's setup. The bench database is not reset: it keeps run 1's 300,000
+messages, the warm-up's 3,001, and the seeded 20 M.
+
+What the run adds over run 1:
+
+- `db.pool.acquire.wait_time`: total time acquires spent waiting, not only how
+  many waited. `metrics.sh` divides it by the request count.
+- A 1 s sample of the API's backends in `pg_stat_activity`, through
+  `application_name=webhook-api`: how many are open, how many are
+  `idle in transaction` (waiting for the API's next statement), and what the
+  active ones wait on (`CPU` means running).
+
+How to read it: if waits fall to near 0 and p99 falls, the pool was the
+bottleneck. If waits fall but p99 stays, the queue moved into Postgres, and
+the wait sample shows where.
+
+One run against run 1 is a comparison of two points, and run 1 ran with a
+load average of 14–25. A large change is still readable; a change of a few
+milliseconds is not.
+
+### Prediction
+
+Written by Sony on 2026-10-02, before the run.
+
+| # | Prediction | Number | Why |
+|---|---|---|---|
+| 1 | API pool waits | about 2/3 lower than run 1 (≈ 3,400) | — |
+| 2–8 | Wait per request, API latency, open connections, wait events, `idle_in_tx`, claim p99, drain | about the same as run 1, no large improvement | — |
+| 9 | Conclusion | the connection pool causes the API pool waits | — |
+
+### Run
+
+```bash
+export POSTGRES_URL='postgres://localhost:5432/webhook_lab_bench?sslmode=disable'
+
+go run ./cmd/receiver -latency 10ms -fail-rate 0.05
+POSTGRES_URL="$POSTGRES_URL&pool_max_conns=16&application_name=webhook-api" \
+  go run ./cmd/api
+POSTGRES_URL="$POSTGRES_URL&pool_max_conns=40&application_name=webhook-worker" \
+  WORKER_COUNT=30 WORKER_BATCH_SIZE=10 WORKER_CLAIM_MODE=skiplocked go run ./cmd/worker
+
+labs/02-large-table/run.sh run2-pool16
+```
+
+### Results
+
+| Run | API pool | API p50 / p95 / p99 | Pool waits | Pool wait per request | Claim p50 / p99 | Drain | Lag p50 / p99 |
+|---|---|---|---|---|---|---|---|
+| 1 | 8 | 0.65 / 1.6 / 21.5 ms | 10,226 | not measured | 0.84 / 7.1 ms | 104 s | 0.20 / 55.2 s |
+| 2 | 16 | 0.71 / 1.58 / 23.2 ms | 8,543 | 0.95 ms (33.6 ms per waited acquire) | 0.86 / 7.9 ms | 84 s | 0.19 / 55.3 s |
+
+Run 2, 2026-10-02 16:29–16:35 (`RUN=20261002-162907`), after the same 30 s
+warm-up. Load average 2–5, swap flat at 2.5 GB. Raw output in
+`results/run2-pool16-*.txt`.
+
+- k6: 300,001 requests at 1,000.0/s, 0 dropped, 0 failed. Max 362 ms (run 1: 508 ms).
+- 14,905 retried deliveries, 0 failed, 0 duplicates.
+- Pool waits fell by 16% (10,226 → 8,543), and p99 did not fall.
+- All 16 connections stayed open, but the 1 s sample found on average
+  **0.4 busy**: 0 busy in 211 of 290 samples, 1 busy in 73.
+- The busiest samples were all WAL waits: 7 backends in `LWLock/WALWrite`
+  at 16:30:26, 5 at 16:30:16, 4 + 1 `IO/WalWrite` at 16:31:20.
+- Autovacuum ran about every 1.5 min, not every minute: run 1 left 1.9% of
+  `deliveries` pages unfrozen, which raised the insert threshold to about
+  76,500 inserts.
+
+What this says: the pool is not short of connections on average. A wait
+happens during a short stall, when one WAL flush makes every committing
+backend wait together. At 1,000 req/s, a 30 ms stall brings about 30 new
+requests, more than 16 connections can take, so some wait about 34 ms each.
+A bigger pool only adds more backends to the same WAL queue.
+
 ## Why the numbers changed
 
 _To write after the run._

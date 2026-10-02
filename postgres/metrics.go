@@ -31,6 +31,12 @@ func registerPoolMetrics(pool *pgxpool.Pool) (metric.Registration, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create acquire waits counter: %w", err)
 	}
+	acquireWaitTime, err := meter.Float64ObservableCounter("db.pool.acquire.wait_time",
+		metric.WithDescription("Total time spent in acquires that waited."),
+		metric.WithUnit("s"))
+	if err != nil {
+		return nil, fmt.Errorf("create acquire wait time counter: %w", err)
+	}
 
 	acquired := metric.WithAttributes(attribute.String("state", "acquired"))
 	idle := metric.WithAttributes(attribute.String("state", "idle"))
@@ -40,6 +46,7 @@ func registerPoolMetrics(pool *pgxpool.Pool) (metric.Registration, error) {
 		o.ObserveInt64(connections, int64(stat.IdleConns()), idle)
 		o.ObserveInt64(maxConnections, int64(stat.MaxConns()))
 		o.ObserveInt64(acquireWaits, stat.EmptyAcquireCount())
+		o.ObserveFloat64(acquireWaitTime, stat.EmptyAcquireWaitTime().Seconds())
 		return nil
-	}, connections, maxConnections, acquireWaits)
+	}, connections, maxConnections, acquireWaits, acquireWaitTime)
 }

@@ -24,3 +24,5 @@ echo "pending due peak:             $(q "max_over_time(max(deliveries_pending{st
 echo "delivery lag p50 / p99 (s):   $(q "histogram_quantile(0.5, sum by (le) (increase(delivery_lag_seconds_bucket[${window}s])))") / $(q "histogram_quantile(0.99, sum by (le) (increase(delivery_lag_seconds_bucket[${window}s])))")"
 echo "api pool acquire waits:       $(q "sum(increase(db_pool_acquire_waits_total{job=\"webhook-api\"}[${window}s]))")"
 echo "worker pool acquire waits:    $(q "sum(increase(db_pool_acquire_waits_total{job=\"webhook-worker\"}[${window}s]))")"
+echo "api pool wait time total (s): $(q "sum(increase({__name__=~\"db_pool_acquire_wait_time.*\",job=\"webhook-api\"}[${window}s]))")"
+echo "api pool wait per request (ms): $(q "1000 * sum(increase({__name__=~\"db_pool_acquire_wait_time.*\",job=\"webhook-api\"}[${window}s])) / sum(increase(http_server_request_duration_seconds_count{job=\"webhook-api\"}[${window}s]))")"
