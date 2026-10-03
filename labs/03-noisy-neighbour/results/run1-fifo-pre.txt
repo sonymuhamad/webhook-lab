@@ -1,0 +1,9 @@
+Sat Oct  3 17:04:05 WIB 2026
+17:04  up 2 days, 23:45, 7 users, load averages: 3.68 5.82 4.32
+total = 3072.00M  used = 1919.88M  free = 1152.12M  (encrypted)
+relname	n_live_tup	n_dead_tup	last_autovacuum	autovacuum_count
+attempts	20628373	0	2026-10-02 16:33:07.863206+07	28
+deliveries	20159275	136458	2026-10-02 16:33:06.383048+07	35
+messages	996471	0	2026-10-02 16:34:54.338981+07	14
+5936 kB
+
