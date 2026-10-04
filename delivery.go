@@ -99,6 +99,9 @@ type DeliveryRepository interface {
 	CreateForActiveEndpoints(ctx context.Context, message Message) (int64, error)
 	ListByMessage(ctx context.Context, messageID uuid.UUID) ([]Delivery, error)
 	Update(ctx context.Context, param UpdateDeliveryParam) error
+	// Postpone hands a claimed delivery back without an attempt: it becomes
+	// due again at until and keeps its attempt count.
+	Postpone(ctx context.Context, id uuid.UUID, until time.Time) error
 	CreateAttempt(ctx context.Context, param CreateAttemptParam) error
 	ListAttempts(ctx context.Context, deliveryIDs []uuid.UUID) ([]Attempt, error)
 	CountPending(ctx context.Context) (PendingCount, error)

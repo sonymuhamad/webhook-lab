@@ -134,3 +134,12 @@ SELECT c.id, c.message_id, c.tenant_id, c.endpoint_id, c.attempt_count,
 FROM claimed c
 JOIN endpoints e ON e.id = c.endpoint_id
 JOIN messages m ON m.id = c.message_id;
+
+-- name: PostponeDelivery :exec
+-- Hands a claimed delivery back without an attempt: it becomes due again at
+-- next_attempt_at and keeps its attempt count.
+UPDATE deliveries
+SET next_attempt_at = $2,
+    updated_at      = now()
+WHERE id = $1
+  AND status = 'pending';

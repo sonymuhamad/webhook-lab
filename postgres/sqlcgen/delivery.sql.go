@@ -410,6 +410,26 @@ func (q *Queries) ListDueDeliveries(ctx context.Context, limit int32) ([]ListDue
 	return items, nil
 }
 
+const postponeDelivery = `-- name: PostponeDelivery :exec
+UPDATE deliveries
+SET next_attempt_at = $2,
+    updated_at      = now()
+WHERE id = $1
+  AND status = 'pending'
+`
+
+type PostponeDeliveryParams struct {
+	ID            uuid.UUID
+	NextAttemptAt time.Time
+}
+
+// Hands a claimed delivery back without an attempt: it becomes due again at
+// next_attempt_at and keeps its attempt count.
+func (q *Queries) PostponeDelivery(ctx context.Context, arg PostponeDeliveryParams) error {
+	_, err := q.db.Exec(ctx, postponeDelivery, arg.ID, arg.NextAttemptAt)
+	return err
+}
+
 const updateDeliveryAfterAttempt = `-- name: UpdateDeliveryAfterAttempt :exec
 UPDATE deliveries
 SET status          = $2,

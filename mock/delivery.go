@@ -12,6 +12,7 @@ package mock
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	uuid "github.com/google/uuid"
 	webhook "github.com/sonymuhamad/webhook-lab"
@@ -207,6 +208,20 @@ func (m *MockDeliveryRepository) ListByMessage(ctx context.Context, messageID uu
 func (mr *MockDeliveryRepositoryMockRecorder) ListByMessage(ctx, messageID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListByMessage", reflect.TypeOf((*MockDeliveryRepository)(nil).ListByMessage), ctx, messageID)
+}
+
+// Postpone mocks base method.
+func (m *MockDeliveryRepository) Postpone(ctx context.Context, id uuid.UUID, until time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Postpone", ctx, id, until)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Postpone indicates an expected call of Postpone.
+func (mr *MockDeliveryRepositoryMockRecorder) Postpone(ctx, id, until any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Postpone", reflect.TypeOf((*MockDeliveryRepository)(nil).Postpone), ctx, id, until)
 }
 
 // Update mocks base method.

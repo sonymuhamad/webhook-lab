@@ -76,6 +76,14 @@ func (r *DeliveryRepository) Update(ctx context.Context, param webhook.UpdateDel
 	return nil
 }
 
+func (r *DeliveryRepository) Postpone(ctx context.Context, id uuid.UUID, until time.Time) error {
+	err := queries(ctx, r.pool).PostponeDelivery(ctx, sqlcgen.PostponeDeliveryParams{ID: id, NextAttemptAt: until})
+	if err != nil {
+		return fmt.Errorf("postpone delivery: %w", err)
+	}
+	return nil
+}
+
 func (r *DeliveryRepository) CreateAttempt(ctx context.Context, param webhook.CreateAttemptParam) error {
 	var statusCode *int32
 	if param.StatusCode != nil {

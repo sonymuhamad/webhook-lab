@@ -55,6 +55,10 @@ type Worker struct {
 	// workers. It must outlast a whole batch, which is sent one delivery at a
 	// time: BatchSize × DELIVERY_TIMEOUT in the worst case.
 	ClaimLease time.Duration `env:"CLAIM_LEASE" envDefault:"2m"`
+	// EndpointConcurrency caps how many of this process's loops may send to
+	// one endpoint at the same time, so a slow endpoint cannot hold every
+	// loop. 0 means no cap.
+	EndpointConcurrency int `env:"ENDPOINT_CONCURRENCY" envDefault:"0"`
 }
 
 type Delivery struct {

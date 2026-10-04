@@ -217,3 +217,25 @@ func TestFairClaimerConcurrentClaimsAreDisjoint(t *testing.T) {
 		t.Error("no delivery claimed")
 	}
 }
+
+func TestPostponeHidesDeliveryWithoutAnAttempt(t *testing.T) {
+	resetDB(t)
+	ctx := context.Background()
+	repo := postgres.NewDeliveryRepository(testPool)
+	ids := seedDue(t, 1)
+
+	if err := repo.Postpone(ctx, ids[0], time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("Postpone: %v", err)
+	}
+
+	if got, err := postgres.NewSkipLockedClaimer(testPool, time.Minute).ClaimDue(ctx, 10); err != nil || len(got) != 0 {
+		t.Fatalf("claim after postpone = %d, %v; want 0 until the delivery is due again", len(got), err)
+	}
+	var attempts int
+	if err := testPool.QueryRow(ctx, "SELECT attempt_count FROM deliveries WHERE id = $1", ids[0]).Scan(&attempts); err != nil {
+		t.Fatalf("read attempt count: %v", err)
+	}
+	if attempts != 0 {
+		t.Errorf("attempt_count = %d after postpone, want 0", attempts)
+	}
+}
