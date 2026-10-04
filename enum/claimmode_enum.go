@@ -15,6 +15,8 @@ const (
 	ClaimModeNaive ClaimMode = "naive"
 	// ClaimModeSkiplocked is a ClaimMode of type skiplocked.
 	ClaimModeSkiplocked ClaimMode = "skiplocked"
+	// ClaimModeFair is a ClaimMode of type fair.
+	ClaimModeFair ClaimMode = "fair"
 )
 
 var ErrInvalidClaimMode = fmt.Errorf("not a valid ClaimMode, try [%s]", strings.Join(_ClaimModeNames, ", "))
@@ -22,6 +24,7 @@ var ErrInvalidClaimMode = fmt.Errorf("not a valid ClaimMode, try [%s]", strings.
 var _ClaimModeNames = []string{
 	string(ClaimModeNaive),
 	string(ClaimModeSkiplocked),
+	string(ClaimModeFair),
 }
 
 // ClaimModeNames returns a list of possible string values of ClaimMode.
@@ -46,6 +49,7 @@ func (x ClaimMode) IsValid() bool {
 var _ClaimModeValue = map[string]ClaimMode{
 	"naive":      ClaimModeNaive,
 	"skiplocked": ClaimModeSkiplocked,
+	"fair":       ClaimModeFair,
 }
 
 // ParseClaimMode attempts to convert a string to a ClaimMode.

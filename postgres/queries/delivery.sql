@@ -11,7 +11,7 @@ WHERE e.tenant_id = @tenant_id::uuid
 --
 -- No row locks and no lease: workers running this at once read the same rows
 -- and all send them. Used only by CLAIM_MODE=naive, for lab 01.
-SELECT d.id, d.message_id, d.tenant_id, d.attempt_count,
+SELECT d.id, d.message_id, d.tenant_id, d.endpoint_id, d.attempt_count,
        e.url AS endpoint_url, m.event_type, m.payload, m.created_at AS message_created_at
 FROM deliveries d
 JOIN endpoints e ON e.id = d.endpoint_id
@@ -82,7 +82,54 @@ WITH due AS MATERIALIZED (
     WHERE d.id = due.id
     RETURNING d.id, d.message_id, d.endpoint_id, d.tenant_id, d.attempt_count
 )
-SELECT c.id, c.message_id, c.tenant_id, c.attempt_count,
+SELECT c.id, c.message_id, c.tenant_id, c.endpoint_id, c.attempt_count,
+       e.url AS endpoint_url, m.event_type, m.payload, m.created_at AS message_created_at
+FROM claimed c
+JOIN endpoints e ON e.id = c.endpoint_id
+JOIN messages m ON m.id = c.message_id;
+
+-- name: ClaimDueDeliveriesFair :many
+-- Like ClaimDueDeliveries, but takes the batch from the tenants in turns:
+-- every tenant's oldest due delivery first, then every tenant's second, and
+-- so on. A tenant with a large backlog then gets one slot per turn instead
+-- of the whole batch.
+--
+-- candidates reads at most @per_tenant rows per tenant through
+-- deliveries_due_by_tenant_idx, so its cost grows with the number of tenants,
+-- not with the size of the backlog. It takes no locks: the outer select locks
+-- the chosen rows and skips any that another claim holds, then fills the
+-- batch from the next candidates. @per_tenant must therefore exceed the batch
+-- size, or concurrent claims on a single busy tenant come back short.
+WITH candidates AS (
+    SELECT d.id, d.next_attempt_at, d.turn
+    FROM tenants t
+    CROSS JOIN LATERAL (
+        SELECT id, next_attempt_at, row_number() OVER (ORDER BY next_attempt_at) AS turn
+        FROM deliveries
+        WHERE tenant_id = t.id
+          AND status = 'pending'
+          AND next_attempt_at <= now()
+        ORDER BY next_attempt_at
+        LIMIT @per_tenant
+    ) d
+), due AS MATERIALIZED (
+    SELECT d.id
+    FROM deliveries d
+    JOIN candidates c ON c.id = d.id
+    WHERE d.status = 'pending'
+      AND d.next_attempt_at <= now()
+    ORDER BY c.turn, c.next_attempt_at
+    LIMIT @batch_size
+    FOR UPDATE OF d SKIP LOCKED
+), claimed AS (
+    UPDATE deliveries d
+    SET next_attempt_at = now() + make_interval(secs => @lease_seconds::float8),
+        updated_at      = now()
+    FROM due
+    WHERE d.id = due.id
+    RETURNING d.id, d.message_id, d.endpoint_id, d.tenant_id, d.attempt_count
+)
+SELECT c.id, c.message_id, c.tenant_id, c.endpoint_id, c.attempt_count,
        e.url AS endpoint_url, m.event_type, m.payload, m.created_at AS message_created_at
 FROM claimed c
 JOIN endpoints e ON e.id = c.endpoint_id

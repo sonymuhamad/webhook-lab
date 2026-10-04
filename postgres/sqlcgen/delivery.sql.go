@@ -31,7 +31,7 @@ WITH due AS MATERIALIZED (
     WHERE d.id = due.id
     RETURNING d.id, d.message_id, d.endpoint_id, d.tenant_id, d.attempt_count
 )
-SELECT c.id, c.message_id, c.tenant_id, c.attempt_count,
+SELECT c.id, c.message_id, c.tenant_id, c.endpoint_id, c.attempt_count,
        e.url AS endpoint_url, m.event_type, m.payload, m.created_at AS message_created_at
 FROM claimed c
 JOIN endpoints e ON e.id = c.endpoint_id
@@ -47,6 +47,7 @@ type ClaimDueDeliveriesRow struct {
 	ID               uuid.UUID
 	MessageID        uuid.UUID
 	TenantID         uuid.UUID
+	EndpointID       uuid.UUID
 	AttemptCount     int32
 	EndpointURL      string
 	EventType        string
@@ -79,6 +80,103 @@ func (q *Queries) ClaimDueDeliveries(ctx context.Context, arg ClaimDueDeliveries
 			&i.ID,
 			&i.MessageID,
 			&i.TenantID,
+			&i.EndpointID,
+			&i.AttemptCount,
+			&i.EndpointURL,
+			&i.EventType,
+			&i.Payload,
+			&i.MessageCreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const claimDueDeliveriesFair = `-- name: ClaimDueDeliveriesFair :many
+WITH candidates AS (
+    SELECT d.id, d.next_attempt_at, d.turn
+    FROM tenants t
+    CROSS JOIN LATERAL (
+        SELECT id, next_attempt_at, row_number() OVER (ORDER BY next_attempt_at) AS turn
+        FROM deliveries
+        WHERE tenant_id = t.id
+          AND status = 'pending'
+          AND next_attempt_at <= now()
+        ORDER BY next_attempt_at
+        LIMIT $1
+    ) d
+), due AS MATERIALIZED (
+    SELECT d.id
+    FROM deliveries d
+    JOIN candidates c ON c.id = d.id
+    WHERE d.status = 'pending'
+      AND d.next_attempt_at <= now()
+    ORDER BY c.turn, c.next_attempt_at
+    LIMIT $2
+    FOR UPDATE OF d SKIP LOCKED
+), claimed AS (
+    UPDATE deliveries d
+    SET next_attempt_at = now() + make_interval(secs => $3::float8),
+        updated_at      = now()
+    FROM due
+    WHERE d.id = due.id
+    RETURNING d.id, d.message_id, d.endpoint_id, d.tenant_id, d.attempt_count
+)
+SELECT c.id, c.message_id, c.tenant_id, c.endpoint_id, c.attempt_count,
+       e.url AS endpoint_url, m.event_type, m.payload, m.created_at AS message_created_at
+FROM claimed c
+JOIN endpoints e ON e.id = c.endpoint_id
+JOIN messages m ON m.id = c.message_id
+`
+
+type ClaimDueDeliveriesFairParams struct {
+	PerTenant    int32
+	BatchSize    int32
+	LeaseSeconds float64
+}
+
+type ClaimDueDeliveriesFairRow struct {
+	ID               uuid.UUID
+	MessageID        uuid.UUID
+	TenantID         uuid.UUID
+	EndpointID       uuid.UUID
+	AttemptCount     int32
+	EndpointURL      string
+	EventType        string
+	Payload          json.RawMessage
+	MessageCreatedAt time.Time
+}
+
+// Like ClaimDueDeliveries, but takes the batch from the tenants in turns:
+// every tenant's oldest due delivery first, then every tenant's second, and
+// so on. A tenant with a large backlog then gets one slot per turn instead
+// of the whole batch.
+//
+// candidates reads at most @per_tenant rows per tenant through
+// deliveries_due_by_tenant_idx, so its cost grows with the number of tenants,
+// not with the size of the backlog. It takes no locks: the outer select locks
+// the chosen rows and skips any that another claim holds, then fills the
+// batch from the next candidates. @per_tenant must therefore exceed the batch
+// size, or concurrent claims on a single busy tenant come back short.
+func (q *Queries) ClaimDueDeliveriesFair(ctx context.Context, arg ClaimDueDeliveriesFairParams) ([]ClaimDueDeliveriesFairRow, error) {
+	rows, err := q.db.Query(ctx, claimDueDeliveriesFair, arg.PerTenant, arg.BatchSize, arg.LeaseSeconds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ClaimDueDeliveriesFairRow{}
+	for rows.Next() {
+		var i ClaimDueDeliveriesFairRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.MessageID,
+			&i.TenantID,
+			&i.EndpointID,
 			&i.AttemptCount,
 			&i.EndpointURL,
 			&i.EventType,
@@ -254,7 +352,7 @@ func (q *Queries) ListDeliveriesByMessage(ctx context.Context, messageID uuid.UU
 }
 
 const listDueDeliveries = `-- name: ListDueDeliveries :many
-SELECT d.id, d.message_id, d.tenant_id, d.attempt_count,
+SELECT d.id, d.message_id, d.tenant_id, d.endpoint_id, d.attempt_count,
        e.url AS endpoint_url, m.event_type, m.payload, m.created_at AS message_created_at
 FROM deliveries d
 JOIN endpoints e ON e.id = d.endpoint_id
@@ -269,6 +367,7 @@ type ListDueDeliveriesRow struct {
 	ID               uuid.UUID
 	MessageID        uuid.UUID
 	TenantID         uuid.UUID
+	EndpointID       uuid.UUID
 	AttemptCount     int32
 	EndpointURL      string
 	EventType        string
@@ -294,6 +393,7 @@ func (q *Queries) ListDueDeliveries(ctx context.Context, limit int32) ([]ListDue
 			&i.ID,
 			&i.MessageID,
 			&i.TenantID,
+			&i.EndpointID,
 			&i.AttemptCount,
 			&i.EndpointURL,
 			&i.EventType,

@@ -14,6 +14,7 @@ func TestProvideClaimerRejectsBadConfig(t *testing.T) {
 		"unknown mode":             {ClaimMode: enum.ClaimMode("fifo"), BatchSize: 10, ClaimLease: time.Hour},
 		"lease shorter than batch": {ClaimMode: enum.ClaimModeSkiplocked, BatchSize: 10, ClaimLease: time.Minute},
 		"lease equal to batch":     {ClaimMode: enum.ClaimModeSkiplocked, BatchSize: 10, ClaimLease: 100 * time.Second},
+		"fair, lease too short":    {ClaimMode: enum.ClaimModeFair, BatchSize: 10, ClaimLease: time.Minute},
 	}
 	for name, worker := range tests {
 		t.Run(name, func(t *testing.T) {

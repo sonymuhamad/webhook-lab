@@ -44,6 +44,7 @@ type DueDelivery struct {
 	ID               uuid.UUID
 	MessageID        uuid.UUID
 	TenantID         uuid.UUID
+	EndpointID       uuid.UUID
 	EndpointURL      string
 	EventType        string
 	Payload          json.RawMessage

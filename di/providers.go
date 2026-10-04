@@ -17,11 +17,14 @@ func provideClaimer(worker config.Worker, delivery config.Delivery, pool *pgxpoo
 	switch worker.ClaimMode {
 	case enum.ClaimModeNaive:
 		return postgres.NewNaiveClaimer(pool), nil
-	case enum.ClaimModeSkiplocked:
+	case enum.ClaimModeSkiplocked, enum.ClaimModeFair:
 		longestBatch := time.Duration(worker.BatchSize) * delivery.Timeout
 		if worker.ClaimLease <= longestBatch {
 			return nil, fmt.Errorf("WORKER_CLAIM_LEASE %s must exceed WORKER_BATCH_SIZE × DELIVERY_TIMEOUT (%s)",
 				worker.ClaimLease, longestBatch)
+		}
+		if worker.ClaimMode == enum.ClaimModeFair {
+			return postgres.NewFairClaimer(pool, worker.ClaimLease), nil
 		}
 		return postgres.NewSkipLockedClaimer(pool, worker.ClaimLease), nil
 	default:

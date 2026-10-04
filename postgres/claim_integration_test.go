@@ -18,9 +18,15 @@ import (
 // seedDue creates n pending deliveries that are due now and returns their IDs.
 func seedDue(t *testing.T, n int) []uuid.UUID {
 	t.Helper()
+	return seedDueFor(t, "acme", n)
+}
+
+// seedDueFor is seedDue for a new tenant of the given name.
+func seedDueFor(t *testing.T, tenantName string, n int) []uuid.UUID {
+	t.Helper()
 	ctx := context.Background()
 	repo := postgres.NewDeliveryRepository(testPool)
-	tenant, _ := createTenant(t, "acme")
+	tenant, _ := createTenant(t, tenantName)
 	createEndpoint(t, tenant.ID, "https://example.com/hook")
 
 	ids := make([]uuid.UUID, 0, n)
@@ -42,6 +48,7 @@ func claimers() map[string]webhook.Claimer {
 	return map[string]webhook.Claimer{
 		"naive":      postgres.NewNaiveClaimer(testPool),
 		"skiplocked": postgres.NewSkipLockedClaimer(testPool, time.Minute),
+		"fair":       postgres.NewFairClaimer(testPool, time.Minute),
 	}
 }
 
@@ -67,7 +74,8 @@ func TestClaimersReturnOnlyPendingAndDue(t *testing.T) {
 			if len(got) != 1 || got[0].ID != due {
 				t.Fatalf("claimed %+v, want only %s", got, due)
 			}
-			if got[0].EndpointURL != "https://example.com/hook" || got[0].EventType != "booking.created" || len(got[0].Payload) == 0 {
+			if got[0].EndpointURL != "https://example.com/hook" || got[0].EndpointID == uuid.Nil ||
+				got[0].EventType != "booking.created" || len(got[0].Payload) == 0 {
 				t.Errorf("claimed delivery is missing what the sender needs: %+v", got[0])
 			}
 		})
@@ -147,5 +155,65 @@ func TestSkipLockedClaimerConcurrentClaimsAreDisjoint(t *testing.T) {
 	}
 	if len(claimed) != 60 {
 		t.Errorf("claimed %d distinct deliveries, want all 60", len(claimed))
+	}
+}
+
+// The property lab 03 measures, as a test: a tenant with a large backlog does
+// not keep a newer tenant's deliveries out of the batch.
+func TestFairClaimerTakesEveryTenantInTurn(t *testing.T) {
+	resetDB(t)
+	seedDueFor(t, "busy", 30)
+	quiet := seedDueFor(t, "quiet", 2)
+
+	got, err := postgres.NewFairClaimer(testPool, time.Minute).ClaimDue(context.Background(), 10)
+	if err != nil || len(got) != 10 {
+		t.Fatalf("claim = %d deliveries, %v; want 10", len(got), err)
+	}
+	claimed := make(map[uuid.UUID]bool)
+	for _, d := range got {
+		claimed[d.ID] = true
+	}
+	for _, id := range quiet {
+		if !claimed[id] {
+			t.Errorf("quiet tenant's delivery %s was left behind the busy tenant's backlog", id)
+		}
+	}
+}
+
+// Concurrent fair claims on one busy tenant may come back short, but they
+// must never hand the same delivery to two callers.
+func TestFairClaimerConcurrentClaimsAreDisjoint(t *testing.T) {
+	resetDB(t)
+	claimer := postgres.NewFairClaimer(testPool, time.Minute)
+	seedDue(t, 60)
+
+	var (
+		mu      sync.Mutex
+		claimed = make(map[uuid.UUID]int)
+		wg      sync.WaitGroup
+	)
+	for range 6 {
+		wg.Go(func() {
+			got, err := claimer.ClaimDue(context.Background(), 10)
+			if err != nil {
+				t.Errorf("ClaimDue: %v", err)
+				return
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			for _, d := range got {
+				claimed[d.ID]++
+			}
+		})
+	}
+	wg.Wait()
+
+	for id, n := range claimed {
+		if n > 1 {
+			t.Errorf("delivery %s claimed %d times", id, n)
+		}
+	}
+	if len(claimed) == 0 {
+		t.Error("no delivery claimed")
 	}
 }

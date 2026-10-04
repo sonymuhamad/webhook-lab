@@ -69,11 +69,43 @@ func (c *SkipLockedClaimer) ClaimDue(ctx context.Context, limit int) ([]webhook.
 	return due, nil
 }
 
+// FairClaimer is SkipLockedClaimer with the batch taken from the tenants in
+// turns, so a tenant with a large backlog gets one slot per turn instead of
+// the whole batch.
+type FairClaimer struct {
+	pool  *pgxpool.Pool
+	lease time.Duration
+}
+
+func NewFairClaimer(pool *pgxpool.Pool, lease time.Duration) *FairClaimer {
+	return &FairClaimer{pool: pool, lease: lease}
+}
+
+func (c *FairClaimer) ClaimDue(ctx context.Context, limit int) ([]webhook.DueDelivery, error) {
+	rows, err := queries(ctx, c.pool).ClaimDueDeliveriesFair(ctx, sqlcgen.ClaimDueDeliveriesFairParams{
+		// Twice the batch leaves room for rows that concurrent claims hold,
+		// so a claim on one busy tenant still comes back full.
+		PerTenant:    int32(2 * limit),
+		BatchSize:    int32(limit),
+		LeaseSeconds: c.lease.Seconds(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("claim due deliveries fairly: %w", err)
+	}
+
+	due := make([]webhook.DueDelivery, len(rows))
+	for i, row := range rows {
+		due[i] = toDueDelivery(sqlcgen.ListDueDeliveriesRow(row))
+	}
+	return due, nil
+}
+
 func toDueDelivery(row sqlcgen.ListDueDeliveriesRow) webhook.DueDelivery {
 	return webhook.DueDelivery{
 		ID:               row.ID,
 		MessageID:        row.MessageID,
 		TenantID:         row.TenantID,
+		EndpointID:       row.EndpointID,
 		EndpointURL:      row.EndpointURL,
 		EventType:        row.EventType,
 		Payload:          row.Payload,
