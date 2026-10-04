@@ -55,5 +55,9 @@ kill $sampler
     --data-urlencode "query=max_over_time(sum(rate(delivery_attempts_total[30s]))[$((end - start))s:15s])" \
     --data-urlencode "time=$end" | jq -r '.data.result[0].value[1] // "n/a"')
   echo "peak sends/s (30 s rate):     $peak"
+  postponed=$(curl -sS "$prom/api/v1/query" \
+    --data-urlencode "query=sum(increase(delivery_postponed_total[$((end - start))s]))" \
+    --data-urlencode "time=$end" | jq -r '.data.result[0].value[1] // "0"')
+  echo "postponed (endpoint at cap):  $postponed"
 } >> "$out-report.txt" 2>&1
 echo "run $RUN drained at $end; results in results/$name-*.txt"
